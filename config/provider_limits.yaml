@@ -9,26 +9,39 @@
 #     tpd: <tokens per day>
 
 mistral:
+  # Mistral free tier: 1 RPS (60 RPM), 500K TPM, 1B tokens/month
+  # Being conservative with 30 RPM to avoid hitting limits
   mistral-tiny:
-    rpm: 1
-    rpd: 500
+    rpm: 30
+    rpd: 43200  # 30 * 60 * 24
     tpm: 500000
-    tpd: 1000000
+    tpd: 720000000  # 500K * 60 * 24
   open-mixtral-8x7b:
-    rpm: 1
-    rpd: 500
+    rpm: 30
+    rpd: 43200
     tpm: 500000
-    tpd: 1000000
+    tpd: 720000000
   mistral-small-latest:
-    rpm: 1
-    rpd: 500
+    rpm: 30
+    rpd: 43200
     tpm: 500000
-    tpd: 1000000
+    tpd: 720000000
+  mistral-large-latest:
+    rpm: 30
+    rpd: 43200
+    tpm: 500000
+    tpd: 720000000
 
 cerebras:
+  # Cerebras free tier: ~600 requests/hour, 60K TPM, 14.4K requests/day
   llama3.1-8b:
-    rpm: null  # No per-minute limit, use rpd/60
+    rpm: 10  # 600/hour = 10/min
     rpd: 14400
     tpm: 60000
-    tpd: null  # Calculate from tpm if needed
+    tpd: 86400000  # 60K * 60 * 24
+  gpt-oss-120b:
+    rpm: 10
+    rpd: 14400
+    tpm: 60000  
+    tpd: 86400000
 

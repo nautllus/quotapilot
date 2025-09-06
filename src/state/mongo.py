@@ -45,7 +45,7 @@ async def init_mongo() -> Tuple[AsyncIOMotorClient, AsyncIOMotorDatabase]:
     min_pool = int(os.getenv("MONGODB_MIN_POOL_SIZE", "0"))
     connect_timeout_ms = int(os.getenv("MONGODB_CONNECT_TIMEOUT_MS", "10000"))
     socket_timeout_ms = int(os.getenv("MONGODB_SOCKET_TIMEOUT_MS", "20000"))
-    wait_queue_timeout_ms = int(os.getenv("MONGODB_WAIT_QUEUE_TIMEOUT_MS", "0"))
+    wait_queue_timeout_ms = int(os.getenv("MONGODB_WAIT_QUEUE_TIMEOUT_MS", "10000"))
 
     try:
         _client = AsyncIOMotorClient(

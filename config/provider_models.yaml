@@ -5,4 +5,37 @@ cerebras:
       supports_tools: false
       supports_stream: true
       context_window: 8192
+    - name: gpt-oss-120b
+      supports_json: true
+      supports_tools: false
+      supports_stream: true
+      context_window: 65536  # 64K context for free tier
+    - name: llama-3.3-70b
+      supports_json: true
+      supports_tools: false
+      supports_stream: true
+      context_window: 8192
+
+mistral:
+  models:
+    - name: mistral-tiny
+      supports_json: true
+      supports_tools: true
+      supports_stream: true
+      context_window: 32768
+    - name: open-mixtral-8x7b
+      supports_json: true
+      supports_tools: true
+      supports_stream: true
+      context_window: 32768
+    - name: mistral-small-latest
+      supports_json: true
+      supports_tools: true
+      supports_stream: true
+      context_window: 32768
+    - name: mistral-large-latest
+      supports_json: true
+      supports_tools: true
+      supports_stream: true
+      context_window: 128000
 
