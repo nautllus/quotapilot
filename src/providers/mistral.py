@@ -19,6 +19,9 @@ class MistralRateLimitError(Exception):
         # Common fields providers use
         self.retry_after = headers.get("retry-after") or headers.get("Retry-After")
 
+    def __str__(self) -> str:  # helpful for logs
+        return f"MistralRateLimitError(status_code={self.status_code}, retry_after={self.retry_after})"
+
 
 class MistralAdapter(ProviderAdapter):
     """Mistral provider adapter implementing ProviderAdapter.

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
@@ -5,6 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from gateway.schemas import ChatRequest, ChatResponse
 from providers.base import ProviderAdapter
 from .registry import ProviderRegistry
+from .retry import is_retryable, calculate_backoff
 from state.budget import BudgetManager, estimate_tokens_from_request_text
 
 logger = logging.getLogger(__name__)
@@ -29,32 +31,98 @@ class Router:
         self._budget = budget
 
     async def route_request(self, request: ChatRequest) -> ChatResponse:
-        selected = await self._select_provider_and_model(request)
-        # For initial/basic streaming support, call provider without streaming;
-        # the gateway can synthesize SSE from the final response.
-        req = request.model and request or request.copy()
-        # Ensure the chosen model is set and streaming disabled for provider call
-        req.model = selected.model
-        req.stream = False
-        logger.info("Routing request to provider=%s model=%s", selected.provider.name, selected.model)
-        resp = await selected.provider.chat(req)
+        # Build candidates list; include budget checks later per-provider
+        candidates = await self._list_capable_candidates(request)
+        if not candidates:
+            logger.error("No capable provider candidates for request")
+            raise NoCapableProviderError("No capable provider candidates")
 
-        # Record usage if budget manager is available
-        if self._budget is not None:
-            try:
-                await self._budget.record_usage(
-                    provider=selected.provider.name,
-                    model=selected.model,
-                    request_tokens=resp.usage.prompt_tokens,
-                    response_tokens=resp.usage.completion_tokens,
-                    success=True,
-                )
-            except Exception as e:  # pragma: no cover - do not break on metering failure
-                logger.warning("Failed to record usage: %s", e)
+        # Unique providers (preserve first model per provider)
+        seen = set()
+        queue: List[SelectedProvider] = []
+        for prov, model in candidates:
+            if prov.name in seen:
+                continue
+            seen.add(prov.name)
+            queue.append(SelectedProvider(provider=prov, model=model))
+            if len(queue) >= 3:  # max 3 providers total
+                break
 
-        return resp
+        last_error: Optional[Exception] = None
+        for sp in queue:
+            # Prepare request for this provider
+            req = request.model and request or request.copy()
+            req.model = sp.model
+            # Ensure provider call is non-streaming; gateway handles SSE
+            req.stream = False
 
-    async def _select_provider_and_model(self, request: ChatRequest) -> SelectedProvider:
+            # Retry up to 2 attempts on this provider
+            attempt = 0
+            while attempt < 2:
+                attempt += 1
+                try:
+                    logger.info("Provider %s attempt %d", sp.provider.name, attempt)
+                    resp = await sp.provider.chat(req)
+
+                    # Record usage on success
+                    if self._budget is not None:
+                        try:
+                            await self._budget.record_usage(
+                                provider=sp.provider.name,
+                                model=sp.model,
+                                request_tokens=resp.usage.prompt_tokens,
+                                response_tokens=resp.usage.completion_tokens,
+                                success=True,
+                            )
+                        except Exception as e:  # pragma: no cover
+                            logger.warning("Failed to record usage: %s", e)
+                    return resp
+                except Exception as e:
+                    action, status_code, retry_after = is_retryable(e)
+                    last_error = e
+                    # Record failed attempt (no tokens)
+                    if self._budget is not None:
+                        try:
+                            await self._budget.record_usage(
+                                provider=sp.provider.name,
+                                model=sp.model,
+                                request_tokens=0,
+                                response_tokens=0,
+                                success=False,
+                                error_code=int(status_code or 0) if status_code is not None else None,
+                            )
+                        except Exception as rec_err:  # pragma: no cover
+                            logger.warning("Failed to record failed usage: %s", rec_err)
+
+                    if action == "retry_same" and attempt < 2:
+                        delay = calculate_backoff(attempt, retry_after)
+                        logger.info(
+                            "Retrying provider %s after %.2fs due to status %s",
+                            sp.provider.name,
+                            delay,
+                            status_code,
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+
+                    if action == "no_retry":
+                        logger.error("Non-retryable error from %s: %s", sp.provider.name, e)
+                        raise
+
+                    # switch_provider or attempts exhausted
+                    logger.info(
+                        "Switching provider after error from %s (status %s, attempt %d)",
+                        sp.provider.name,
+                        status_code,
+                        attempt,
+                    )
+                    break  # move to next provider
+
+        # Exhausted all providers
+        logger.error("All providers exhausted; last error: %s", last_error)
+        raise NoCapableProviderError("All providers exhausted by retry/failover")
+
+    async def _list_capable_candidates(self, request: ChatRequest) -> List[Tuple[ProviderAdapter, str]]:
         requires_json = bool(request.json) or (
             isinstance(request.response_format, dict)
             and request.response_format.get("type") == "json_object"
@@ -99,13 +167,15 @@ class Router:
                 candidates.append((provider, name))
 
         if not candidates:
-            logger.error("No capable provider found for request requirements: json=%s tools=%s stream=%s",
-                         requires_json, requires_tools, requires_stream)
-            raise NoCapableProviderError("No capable provider available for requested capabilities")
+            logger.error(
+                "No capable provider found for request requirements: json=%s tools=%s stream=%s",
+                requires_json,
+                requires_tools,
+                requires_stream,
+            )
+            return []
 
-        # For now, return the first candidate.
-        provider, model = candidates[0]
-        return SelectedProvider(provider=provider, model=model)
+        return candidates
 
     def _estimate_prompt_tokens(self, request: ChatRequest) -> int:
         try:
