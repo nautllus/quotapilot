@@ -6,7 +6,7 @@ try:
     # Optional import for type hints only to avoid runtime dependency loops
     from typing import TYPE_CHECKING
     if TYPE_CHECKING:
-        from src.gateway.schemas import ChatRequest, ChatResponse
+        from gateway.schemas import ChatRequest, ChatResponse
 except Exception:  # pragma: no cover - strictly for safety in skeleton
     pass
 
@@ -18,7 +18,10 @@ class ProviderAdapter(ABC):
     compatible with the router. Keep return shapes simple (dicts / Pydantic models).
     """
 
-    name: str = "provider"
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """A short provider identifier (e.g., 'google', 'mistral')."""
 
     @abstractmethod
     async def models(self) -> List[Dict[str, Any]]:
