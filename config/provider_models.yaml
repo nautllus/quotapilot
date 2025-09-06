@@ -1,0 +1,8 @@
+cerebras:
+  models:
+    - name: llama3.1-8b
+      supports_json: true
+      supports_tools: false
+      supports_stream: true
+      context_window: 8192
+

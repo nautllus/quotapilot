@@ -1,6 +1,8 @@
 import logging
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from providers.base import ProviderAdapter
 
@@ -11,7 +13,7 @@ class ProviderRegistry:
     """Registry for provider adapters.
 
     - Holds instantiated providers keyed by provider.name
-    - On init, auto-registers MistralAdapter if MISTRAL_API_KEY is set
+    - On init, auto-registers providers if API keys are set
     """
 
     def __init__(self) -> None:
@@ -34,12 +36,36 @@ class ProviderRegistry:
         return self._providers.get(name)
 
     def _auto_register(self) -> None:
-        # Only register Mistral if API key is present
+        models_cfg = self._load_provider_models()
+
+        # Mistral
         if os.getenv("MISTRAL_API_KEY"):
             try:
-                from providers.mistral import MistralAdapter  # local import to avoid hard dep
-
+                from providers.mistral import MistralAdapter  # local import
                 self.register_provider(MistralAdapter())
             except Exception as e:
                 logger.warning("Could not auto-register MistralAdapter: %s", e)
 
+        # Cerebras
+        if os.getenv("CEREBRAS_API_KEY"):
+            try:
+                from providers.cerebras import CerebrasAdapter  # local import
+                cerebras_models = models_cfg.get("cerebras", {}).get("models", [])
+                self.register_provider(CerebrasAdapter(models_config=cerebras_models))
+            except Exception as e:
+                logger.warning("Could not auto-register CerebrasAdapter: %s", e)
+
+    def _load_provider_models(self) -> Dict[str, Any]:
+        path = os.getenv(
+            "PROVIDER_MODELS_PATH",
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config", "provider_models.yaml"),
+        )
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f) or {}
+        except FileNotFoundError:
+            logger.info("Provider models config not found at %s; proceeding without models config", path)
+            return {}
+        except Exception as e:
+            logger.warning("Failed to load provider models config: %s", e)
+            return {}

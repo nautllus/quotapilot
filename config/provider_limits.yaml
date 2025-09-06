@@ -25,3 +25,10 @@ mistral:
     tpm: 500000
     tpd: 1000000
 
+cerebras:
+  llama3.1-8b:
+    rpm: null  # No per-minute limit, use rpd/60
+    rpd: 14400
+    tpm: 60000
+    tpd: null  # Calculate from tpm if needed
+
