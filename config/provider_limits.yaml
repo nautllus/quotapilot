@@ -1,0 +1,27 @@
+# Static provider limits for FREE tier usage
+# Adjust these values per your workspace tier if different.
+# Structure:
+# provider:
+#   model-name:
+#     rpm: <requests per minute>
+#     rpd: <requests per day>
+#     tpm: <tokens per minute>
+#     tpd: <tokens per day>
+
+mistral:
+  mistral-tiny:
+    rpm: 1
+    rpd: 500
+    tpm: 500000
+    tpd: 1000000
+  open-mixtral-8x7b:
+    rpm: 1
+    rpd: 500
+    tpm: 500000
+    tpd: 1000000
+  mistral-small-latest:
+    rpm: 1
+    rpd: 500
+    tpm: 500000
+    tpd: 1000000
+
